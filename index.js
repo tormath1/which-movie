@@ -1,4 +1,4 @@
-const https = require('https');
+const request = require('request');
 
 var movie = {
 	token: null,
@@ -7,74 +7,55 @@ var movie = {
 	// fetch the category ID used by the API
 	getGenreId: (genre) => {
 		return new Promise((resolve, reject) => {
-			var options = {
-				headers: {
-					Authorization: 'Bearer ' + movie.token
-				}
-			}
-			https.get('https://api.themoviedb.org/3/genre/movie/list', options, (res) => {
-
-				res.on('data', (d) => {
-					var genres = JSON.parse(d).genres
-					for (var i = 0; i < genres.length; i ++) {
-						if (genres[i].name == genre) {
-							resolve(genres[i].id)
-						}
+			request.get('https://api.themoviedb.org/3/genre/movie/list', (err, res, body) => {
+				if (err) { reject(err); }
+				var genres = JSON.parse(body).genres;
+				for (var i = 0; i < genres.length; i ++) {
+					if (genres[i].name == genre) {
+						resolve(genres[i].id);
 					}
-				});
-
-			}).on('error', (e) => {
-				// TODO: extract the error
-				console.error(e)
-				reject(e)
-			}).end();
-		});
-	},
-
-	// getMovie returns a random movie from the api
-	// with `genre` as filter
-	getMovie: (genre) => {
-		return new Promise((resolve, reject) => {
-			var options = {
-				headers: {
-					Authorization: 'Bearer ' + movie.token
 				}
-			}
+			}).auth(null, null, true, movie.token);
+		});
+	},
+	
+	// getRandomPage returns a random page from the number of results
+	getRandomPage: (genre) => {
+		return new Promise((resolve, reject) => {
 			movie.getGenreId(genre).then((id) => {
-				https.get('https://api.themoviedb.org/3/discover/movie?with_genres=' + id, options, (res) => {
-					var chuncks = [];
-					res.on('data', (d) => {
-						chuncks.push(d);
-					}).on('end', () => {
-						var data = Buffer.concat(chuncks);
-						var movies = JSON.parse(data);
-						var number_pages = movies.total_pages;
-						var random_page = movie.getRandomPage(number_pages);
-						resolve(random_page)
-					});
-				}).on('error', (e) => {
-					// TODO: extract the error
-					console.error(e)
-					reject(e)
-				}).end();
+				request.get('https://api.themoviedb.org/3/discover/movie?with_genres=' + id, (err, res, body) => {
+					if (err) { reject(err); }
+					var movies = JSON.parse(body);
+					var random_page = movie.getRandomInt(movies.total_pages);
+					resolve({random_page, id});
+				}).auth(null, null, true, movie.token);
 			});
-				
 		});
 	},
 
-	// getRandomPage returns a random index of page
-	getRandomPage: (number_of_pages) => {
-		// get an element in [1; number_of_pages]
-		return Math.floor(Math.random() * number_of_pages) + 1
+	// getRandomMovie returns a random movie from a random page
+	// with a genre
+	getRandomMovieId: (genre) => {
+		return new Promise((resolve, reject) => {
+			movie.getRandomPage(genre).then((res) => {
+				request.get('https://api.themoviedb.org/3/discover/movie?with_genres=' + res.id + '&page=' + res.random_page, (err, res, body) => {
+					if (err) { reject(err); }
+					var movies = JSON.parse(body);
+					var random_index = movie.getRandomInt(movies.results.length)
+					resolve(movies.results[random_index - 1])
+				}).auth(null, null, true, movie.token);
+			});
+		});
 	},
 
-	// getIndex returns the index of the page
-	getIndex: (index, number_of_pages, page) => {
-		return index - number_of_pages * page
+	// getRandomInt retuns an integer
+	// where i in [1; max]
+	getRandomInt: (max) => {
+		return Math.floor(Math.random() * max) + 1;
 	}
 }
 
 movie.token = process.env.MOVIEDB_TOKEN
-movie.getMovie('Crime').then((movie) => {
-	console.log(movie)
-})
+movie.getRandomMovieId('Comedy').then((movie) => {
+	console.log(movie);
+});
