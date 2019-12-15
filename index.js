@@ -1,7 +1,9 @@
 const request = require('request');
+const TelegramBot = require('node-telegram-bot-api');
 
 var movie = {
 	token: null,
+	bot_token: null,
 
 	// getGenreId makes a call to the API in order to
 	// fetch the category ID used by the API
@@ -52,10 +54,50 @@ var movie = {
 	// where i in [1; max]
 	getRandomInt: (max) => {
 		return Math.floor(Math.random() * max) + 1;
+	},
+
+	// onMessage handles customer request
+	onMessage: () => {
+		var bot = new TelegramBot(movie.bot_token, {polling: true});
+		bot.onText(/\/start/, (msg, match) => {
+			bot.sendMessage(msg.chat.id,'What can I do for you?', {
+				reply_markup: {
+					inline_keyboard: [[
+						{
+							text: 'Get a random movie',
+							callback_data: 'movie'
+						}
+					]]
+				}
+		  	});
+		});
+
+		// Handle callback queries
+		bot.on('callback_query', (data) => {
+			if (data.data == "movie") {
+				bot.sendMessage(data.message.chat.id,'Got it, in which genre ?', {
+					reply_markup: {
+						inline_keyboard: [[
+							{
+								text: 'Action',
+								callback_data: 'Action'
+							},
+							{
+								text: 'Comedy',
+								callback_data: 'Comedy'
+							}
+						]]
+					}
+				});
+			} else {
+				movie.getRandomMovieId(data.data).then((movie) => {
+					bot.sendMessage(data.message.chat.id, "<b>Title: </b>" + movie.title + "\n<b>Overview: </b>" + movie.overview, {parse_mode: "HTML"});
+				});
+			}
+		});
 	}
 }
 
 movie.token = process.env.MOVIEDB_TOKEN
-movie.getRandomMovieId('Comedy').then((movie) => {
-	console.log(movie);
-});
+movie.bot_token = process.env.BOT_TOKEN
+movie.onMessage();
